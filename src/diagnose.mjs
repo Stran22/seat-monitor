@@ -38,46 +38,32 @@ try {
         if (ready.some(count => count > 0)) { await page.waitForTimeout(2000); break; }
         await page.waitForTimeout(1000);
       }
-      const frames = page.frames().length - 1;
-      const frameDiagnostics = [];
-      for (const frame of page.frames()) {
-        try {
-          const structure = await frame.evaluate(() => ({
-            svg: document.querySelectorAll('svg').length,
-            canvas: document.querySelectorAll('canvas').length,
-            circles: document.querySelectorAll('svg circle').length,
-            buttons: document.querySelectorAll('button, [role="button"]').length,
-            seatLike: document.querySelectorAll('[class*="seat" i], [data-seat-id], [data-seat]').length,
-            disabled: document.querySelectorAll('[disabled], [aria-disabled="true"]').length,
-            textLength: document.body?.innerText?.length ?? 0,
-            buttonGroups: (() => {
-              const groups = new Map();
-              for (const el of document.querySelectorAll('button, [role="button"]')) {
-                const signature = [
-                  el.tagName.toLowerCase(),
-                  el.getAttribute('role') === 'button',
-                  el.hasAttribute('aria-label'),
-                  el.hasAttribute('title'),
-                  el.hasAttribute('tabindex'),
-                  el.hasAttribute('disabled'),
-                  el.getAttribute('aria-disabled') === 'true',
-                  el.matches(':disabled'),
-                  el.textContent.trim().length === 0,
-                  el.parentElement?.tagName.toLowerCase() ?? ''
-                ];
-                const key = JSON.stringify(signature);
-                groups.set(key, (groups.get(key) ?? 0) + 1);
-              }
-              return Array.from(groups, ([key, count]) => {
-                const [tag, roleButton, hasLabel, hasTitle, hasTabindex, disabledAttribute, ariaDisabled, nativeDisabled, emptyText, parentTag] = JSON.parse(key);
-                return { tag, roleButton, hasLabel, hasTitle, hasTabindex, disabledAttribute, ariaDisabled, nativeDisabled, emptyText, parentTag, count };
-              }).sort((a,b) => b.count-a.count).slice(0,20);
-            })()
-          }));
-          frameDiagnostics.push({ main: frame === page.mainFrame(), ...structure });
-        } catch { frameDiagnostics.push({ main: frame === page.mainFrame(), inaccessible: true }); }
-      }
-      results.push({ id: target.id, status: response?.status() ?? null, embedded_frames: frames, frame_diagnostics: frameDiagnostics, verified_counts: null, result: 'diagnostic_only' });
+      const selector = 'div[role="button"][aria-label][tabindex]';
+      const snapshot = async () => {
+        const candidates = [];
+        for (const frame of page.frames()) {
+          if (frame === page.mainFrame()) continue;
+          try {
+            const counts = await frame.evaluate(selector => {
+              if (!document.querySelector('canvas')) return null;
+              const nodes = [...document.querySelectorAll(selector)];
+              if (!nodes.length) return null;
+              const sold = nodes.filter(el => el.getAttribute('aria-disabled') === 'true').length;
+              const free = nodes.filter(el => [null, 'false'].includes(el.getAttribute('aria-disabled')) && !el.hasAttribute('disabled') && el.textContent.trim().length > 0).length;
+              const labels = nodes.map(el => el.getAttribute('aria-label')?.trim() ?? '');
+              return { total: nodes.length, free, sold, unknown: nodes.length - free - sold, unique_labels: new Set(labels).size, empty_labels: labels.filter(label => !label).length };
+            }, selector);
+            if (counts) candidates.push(counts);
+          } catch { return null; }
+        }
+        return candidates.length === 1 ? candidates[0] : null;
+      };
+      const first = await snapshot();
+      await page.waitForTimeout(2000);
+      const second = await snapshot();
+      const stable = first !== null && JSON.stringify(first) === JSON.stringify(second);
+      const valid = response?.ok() && stable && second.unknown === 0 && second.empty_labels === 0 && second.unique_labels === second.total;
+      results.push({ id: target.id, status: response?.status() ?? null, stable, candidate_counts: valid ? second : null, verified_counts: null, result: valid ? 'candidate_counts_ready' : 'unverified_structure' });
     } catch (error) {
       // Do not leak page URLs from exception messages into public logs.
       results.push({ id: target.id, status: null, embedded_frames: 0, verified_counts: null, result: 'navigation_failed' });
