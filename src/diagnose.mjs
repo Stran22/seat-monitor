@@ -16,7 +16,9 @@ function targetsFromEnv() {
     if (!/^[a-z0-9.-]+$/i.test(url.hostname)) throw new Error('Invalid hostname');
     if (/^(localhost|.*\.localhost|.*\.local|.*\.internal)$/i.test(url.hostname)) throw new Error('Private host rejected');
     const id = typeof value.id === 'string' && /^[a-zA-Z0-9_-]{1,60}$/.test(value.id) ? value.id : String(i+1);
-    return { id, url: url.href };
+    const expectedTotal = value.expected_total ?? null;
+    if (expectedTotal !== null && (!Number.isSafeInteger(expectedTotal) || expectedTotal < 1)) throw new Error('Invalid expected capacity');
+    return { id, url: url.href, expectedTotal };
   });
 }
 
@@ -73,8 +75,8 @@ try {
         if (i < 9) await page.waitForTimeout(2000);
       }
       const stable = candidate !== null;
-      const valid = response?.ok() && stable;
-      results.push({ id: target.id, status: response?.status() ?? null, stable, attempts, candidate_counts: valid ? candidate : null, verified_counts: null, result: valid ? 'candidate_counts_ready' : 'unverified_structure' });
+      const valid = response?.ok() && stable && (target.expectedTotal === null || candidate.total === target.expectedTotal);
+      results.push({ id: target.id, status: response?.status() ?? null, stable, attempts, candidate_counts: valid ? candidate : null, verified_counts: null, capacity_match: valid && target.expectedTotal !== null, result: valid ? 'candidate_counts_ready' : 'unverified_structure' });
     } catch (error) {
       // Do not leak page URLs from exception messages into public logs.
       results.push({ id: target.id, status: null, embedded_frames: 0, verified_counts: null, result: 'navigation_failed' });
