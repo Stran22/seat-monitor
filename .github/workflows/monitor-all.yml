@@ -1,6 +1,17 @@
 name: Monitor All
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 18 * * *'
+    - cron: '0 23 * * *'
+    - cron: '0 2 * * *'
+    - cron: '0 4 * * *'
+    - cron: '0 5 * * *'
+    - cron: '0 8 * * *'
+    - cron: '0 9 * * *'
+    - cron: '0 10 * * *'
+    - cron: '0 11 * * *'
+    - cron: '0 14 * * *'
 permissions:
   contents: read
 concurrency:
@@ -19,5 +30,6 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: node src/monitor-all.mjs
         env:
+          MONITOR_CRON: ${{ github.event.schedule }}
           MONITOR_API_URL: ${{ secrets.MONITOR_API_URL }}
           MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
