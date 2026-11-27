@@ -1,0 +1,14 @@
+{
+  "name": "seat-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Мониторинг мест",
+  "type": "module",
+  "scripts": {
+    "diagnose": "node src/diagnose.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "playwright": "1.58.2"
+  }
+}
