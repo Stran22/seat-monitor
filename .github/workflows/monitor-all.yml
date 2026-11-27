@@ -1,0 +1,23 @@
+name: Monitor All
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: monitor-write
+  cancel-in-progress: false
+jobs:
+  monitor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: node src/monitor-all.mjs
+        env:
+          MONITOR_API_URL: ${{ secrets.MONITOR_API_URL }}
+          MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
