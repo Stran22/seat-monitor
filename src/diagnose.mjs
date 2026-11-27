@@ -58,12 +58,23 @@ try {
         }
         return candidates.length === 1 ? candidates[0] : null;
       };
-      const first = await snapshot();
-      await page.waitForTimeout(2000);
-      const second = await snapshot();
-      const stable = first !== null && JSON.stringify(first) === JSON.stringify(second);
-      const valid = response?.ok() && stable && second.unknown === 0 && second.empty_labels === 0 && second.unique_labels === second.total;
-      results.push({ id: target.id, status: response?.status() ?? null, stable, candidate_counts: valid ? second : null, verified_counts: null, result: valid ? 'candidate_counts_ready' : 'unverified_structure' });
+      const complete = counts => counts !== null && counts.total > 0 && counts.unknown === 0 && counts.empty_labels === 0 && counts.unique_labels === counts.total;
+      let previous = null;
+      let candidate = null;
+      let attempts = 0;
+      for (let i = 0; i < 10; i++) {
+        attempts++;
+        const current = await snapshot();
+        if (complete(current) && complete(previous) && JSON.stringify(current) === JSON.stringify(previous)) {
+          candidate = current;
+          break;
+        }
+        previous = complete(current) ? current : null;
+        if (i < 9) await page.waitForTimeout(2000);
+      }
+      const stable = candidate !== null;
+      const valid = response?.ok() && stable;
+      results.push({ id: target.id, status: response?.status() ?? null, stable, attempts, candidate_counts: valid ? candidate : null, verified_counts: null, result: valid ? 'candidate_counts_ready' : 'unverified_structure' });
     } catch (error) {
       // Do not leak page URLs from exception messages into public logs.
       results.push({ id: target.id, status: null, embedded_frames: 0, verified_counts: null, result: 'navigation_failed' });
