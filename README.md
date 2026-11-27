@@ -13,7 +13,7 @@
 Для локального запуска:
 
 ```bash
-npm ci
+npm install
 npx playwright install chromium
 MONITOR_TARGETS_JSON='[{"id":"test","url":"https://example.com/"}]' npm run diagnose
 ```
