@@ -35,7 +35,22 @@ try {
       const response = await page.goto(target.url, { waitUntil: 'domcontentloaded', timeout: maxPageTimeMs });
       await page.waitForTimeout(3000);
       const frames = page.frames().length - 1;
-      results.push({ id: target.id, status: response?.status() ?? null, embedded_frames: frames, verified_counts: null, result: 'diagnostic_only' });
+      const frameDiagnostics = [];
+      for (const frame of page.frames()) {
+        try {
+          const structure = await frame.evaluate(() => ({
+            svg: document.querySelectorAll('svg').length,
+            canvas: document.querySelectorAll('canvas').length,
+            circles: document.querySelectorAll('svg circle').length,
+            buttons: document.querySelectorAll('button, [role="button"]').length,
+            seatLike: document.querySelectorAll('[class*="seat" i], [data-seat-id], [data-seat]').length,
+            disabled: document.querySelectorAll('[disabled], [aria-disabled="true"]').length,
+            textLength: document.body?.innerText?.length ?? 0
+          }));
+          frameDiagnostics.push({ main: frame === page.mainFrame(), ...structure });
+        } catch { frameDiagnostics.push({ main: frame === page.mainFrame(), inaccessible: true }); }
+      }
+      results.push({ id: target.id, status: response?.status() ?? null, embedded_frames: frames, frame_diagnostics: frameDiagnostics, verified_counts: null, result: 'diagnostic_only' });
     } catch (error) {
       // Do not leak page URLs from exception messages into public logs.
       results.push({ id: target.id, status: null, embedded_frames: 0, verified_counts: null, result: 'navigation_failed' });
