@@ -8,8 +8,25 @@ async function main() {
   if (!get.ok) throw Error('get_failed');
   const data = await get.json();
   if (!Array.isArray(data.targets) || data.targets.length > 100) throw Error('invalid_targets');
+  const cron = process.env.MONITOR_CRON || '';
+  let targets = data.targets;
+  if (cron) {
+    const match = /^0 (\d{1,2}) \* \* \*$/.exec(cron);
+    if (!match || Number(match[1]) > 23) throw Error('invalid_schedule');
+    const slot = new Date();
+    slot.setUTCHours(Number(match[1]),0,0,0);
+    if (slot.getTime() > Date.now()) slot.setUTCDate(slot.getUTCDate()-1);
+    if (Date.now()-slot.getTime()>3*3600000) throw Error('schedule_too_late');
+    const hour = Number(new Intl.DateTimeFormat('en-GB',{timeZone:data.timezone,hour:'2-digit',hourCycle:'h23'}).format(slot));
+    targets = targets.filter(t => {
+      const remaining = Date.parse(t.starts_at)-slot.getTime();
+      if (!(remaining>0)) return false;
+      const hours = remaining<2*86400000 ? [1,6,9,12,15,18,21] : remaining<=7*86400000 ? [1,6,11,16,21] : [1,6,17];
+      return hours.includes(hour);
+    });
+  }
   let updated=0, failed=0, skipped=0;
-  for (const target of data.targets) {
+  for (const target of targets) {
     if (Date.parse(target.starts_at) <= Date.now()) {skipped++;continue;}
     try {
       if (!/^\d+$/.test(target.id) || !Number.isSafeInteger(Number(target.id)) || !Number.isSafeInteger(target.expected_total) || target.expected_total < 1) throw Error('invalid_target');
@@ -27,7 +44,7 @@ async function main() {
     } catch { failed++; }
     console.log(JSON.stringify({processed:updated+failed+skipped,updated,failed,skipped}));
   }
-  console.log(JSON.stringify({targets_received:data.targets.length,updated,failed,skipped,result:failed?'partial_failure':'batch_complete'}));
+  console.log(JSON.stringify({targets_received:data.targets.length,targets_selected:targets.length,updated,failed,skipped,result:failed?'partial_failure':'batch_complete'}));
   if(failed) process.exitCode=1;
 }
 main().catch(()=>{console.log(JSON.stringify({result:'batch_failed'}));process.exitCode=1;});
