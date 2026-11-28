@@ -16,13 +16,14 @@ async function main() {
     const slot = new Date();
     slot.setUTCHours(Number(match[1]),0,0,0);
     if (slot.getTime() > Date.now()) slot.setUTCDate(slot.getUTCDate()-1);
-    if (Date.now()-slot.getTime()>3*3600000) throw Error('schedule_too_late');
+    const delayed = Date.now()-slot.getTime()>3*3600000;
+    console.log(JSON.stringify({schedule_delay_minutes:Math.floor((Date.now()-slot.getTime())/60000),recovery:delayed}));
     const hour = Number(new Intl.DateTimeFormat('en-GB',{timeZone:data.timezone,hour:'2-digit',hourCycle:'h23'}).format(slot));
     targets = targets.filter(t => {
       const remaining = Date.parse(t.starts_at)-slot.getTime();
       if (!(remaining>0)) return false;
       const hours = remaining<2*86400000 ? [1,6,9,12,15,18,21] : remaining<=7*86400000 ? [1,6,11,16,21] : [1,6,17];
-      return hours.includes(hour);
+      return delayed || hours.includes(hour);
     });
   }
   let updated=0, failed=0, skipped=0;
